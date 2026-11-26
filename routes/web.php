@@ -4,12 +4,12 @@ use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DeviceRequestController;
 use App\Http\Controllers\Admin\InventoryController;
-use App\Http\Controllers\Admin\IoTSimulatorController;
 use App\Http\Controllers\Admin\KnowledgeBaseController;
 use App\Http\Controllers\Admin\MaintenanceController;
 use App\Http\Controllers\Admin\MonitoringController;
 use App\Http\Controllers\Admin\OperationApprovalController;
 use App\Http\Controllers\Admin\RegistrationReviewController;
+use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ScheduleController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterRtRwController;
@@ -18,12 +18,21 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Public Website Routes (No Auth Required)
+| Public Website Routes (Section 16 - No Auth Required)
 |--------------------------------------------------------------------------
 */
 Route::get('/', [PublicController::class, 'home'])->name('public.home');
+Route::get('/tentang', [PublicController::class, 'about'])->name('public.about');
+Route::get('/cara-kerja', [PublicController::class, 'howItWorks'])->name('public.how-it-works');
+Route::get('/teknologi', [PublicController::class, 'technology'])->name('public.technology');
 Route::get('/gis', [PublicController::class, 'gis'])->name('public.gis');
+Route::get('/peta-sebaran', [PublicController::class, 'gis'])->name('public.coverage');
 Route::get('/statistik', [PublicController::class, 'stats'])->name('public.stats');
+Route::get('/dampak-lingkungan', [PublicController::class, 'stats'])->name('public.impact');
+Route::get('/berita', [PublicController::class, 'news'])->name('public.news');
+Route::get('/faq', [PublicController::class, 'faq'])->name('public.faq');
+Route::get('/kontak', [PublicController::class, 'contact'])->name('public.contact');
+Route::get('/chatbot', [PublicController::class, 'chatbotPage'])->name('public.chatbot.page');
 Route::post('/api/public/chatbot', [PublicController::class, 'chatbot'])->name('public.chatbot');
 
 /*
@@ -72,49 +81,54 @@ Route::middleware(['auth'])->group(function () {
         Route::post('/{report}/status', [MaintenanceController::class, 'updateStatus'])->name('update-status');
     });
 
-    // 5. Verifikasi & Pendaftaran RT/RW (Master Admin, Admin Kota)
+    // 5. Laporan & Rekapitulasi Reduksi Massa (Master Admin, Admin Kota, Admin RT/RW)
+    Route::prefix('/admin/laporan')->name('admin.reports.')->middleware('role:master_admin,admin_kota,admin_rtrw')->group(function () {
+        Route::get('/', [ReportController::class, 'index'])->name('index');
+        Route::get('/export-csv', [ReportController::class, 'exportCsv'])->name('export-csv');
+    });
+
+    // 6. Verifikasi & Pendaftaran RT/RW (Master Admin, Admin Kota)
     Route::prefix('/admin/pendaftaran-rtrw')->name('admin.registration-requests.')->middleware('role:master_admin,admin_kota')->group(function () {
         Route::get('/', [RegistrationReviewController::class, 'index'])->name('index');
         Route::post('/{registrationRequest}/approve', [RegistrationReviewController::class, 'approve'])->name('approve');
         Route::post('/{registrationRequest}/reject', [RegistrationReviewController::class, 'reject'])->name('reject');
     });
 
-    // 6. Inventaris & Distribusi Perangkat (Master Admin, Admin Kota)
+    // 7. Inventaris & Distribusi Perangkat (Master Admin, Admin Kota)
     Route::prefix('/admin/inventaris')->name('admin.inventory.')->middleware('role:master_admin,admin_kota')->group(function () {
         Route::get('/', [InventoryController::class, 'index'])->name('index');
         Route::post('/central-stock', [InventoryController::class, 'addCentralStock'])->name('add-central-stock');
+        Route::put('/devices/{device}', [InventoryController::class, 'updateDevice'])->name('update-device');
+        Route::delete('/devices/{device}', [InventoryController::class, 'destroyDevice'])->name('destroy-device');
         Route::post('/allocate-city', [InventoryController::class, 'allocateToCity'])->name('allocate-to-city');
         Route::post('/distribute-rtrw', [InventoryController::class, 'distributeToRtRw'])->name('distribute-to-rtrw');
     });
 
-    // 7. Pengajuan Penambahan Unit Alat (Admin RT/RW, Admin Kota)
+    // 8. Pengajuan Penambahan Unit Alat (Master Admin, Admin Kota, Admin RT/RW)
     Route::prefix('/admin/permintaan-alat')->name('admin.device-requests.')->middleware('role:master_admin,admin_kota,admin_rtrw')->group(function () {
         Route::get('/', [DeviceRequestController::class, 'index'])->name('index');
         Route::post('/', [DeviceRequestController::class, 'store'])->name('store');
         Route::post('/{deviceRequest}/status', [DeviceRequestController::class, 'updateStatus'])->name('update-status');
     });
 
-    // 8. Jadwal Petugas & Manajemen Petugas Lapangan (Admin RT/RW, Admin Lapangan)
-    Route::prefix('/admin/jadwal')->name('admin.schedules.')->middleware('role:master_admin,admin_rtrw,admin_lapangan')->group(function () {
+    // 9. Jadwal Petugas & Manajemen Petugas Lapangan (Master Admin, Admin RT/RW)
+    Route::prefix('/admin/jadwal')->name('admin.schedules.')->middleware('role:master_admin,admin_rtrw')->group(function () {
         Route::get('/', [ScheduleController::class, 'index'])->name('index');
         Route::post('/', [ScheduleController::class, 'store'])->name('store');
         Route::delete('/{schedule}', [ScheduleController::class, 'destroy'])->name('destroy');
         Route::post('/petugas', [ScheduleController::class, 'createOperator'])->name('create-operator');
     });
 
-    // 9. Kelola Knowledge Base RAG AI (Master Admin, Admin Kota)
+    // 10. Kelola Knowledge Base RAG AI (Master Admin, Admin Kota)
     Route::prefix('/admin/knowledge-base')->name('admin.knowledge-base.')->middleware('role:master_admin,admin_kota')->group(function () {
         Route::get('/', [KnowledgeBaseController::class, 'index'])->name('index');
         Route::post('/', [KnowledgeBaseController::class, 'store'])->name('store');
         Route::delete('/{knowledgeDocument}', [KnowledgeBaseController::class, 'destroy'])->name('destroy');
     });
 
-    // 10. Audit Log Sistem (Master Admin, Admin Kota)
-    Route::get('/admin/audit-logs', [AuditLogController::class, 'index'])
-        ->middleware('role:master_admin,admin_kota')
-        ->name('admin.audit-logs.index');
-
-    // 11. Simulator IoT ESP32 (Development & Testing - Rule 21.9)
-    Route::get('/admin/iot-simulator', [IoTSimulatorController::class, 'index'])
-        ->name('admin.iot-simulator.index');
+    // 11. Audit Log Sistem (Master Admin, Admin Kota)
+    Route::prefix('/admin/audit-logs')->name('admin.audit-logs.')->middleware('role:master_admin,admin_kota')->group(function () {
+        Route::get('/', [AuditLogController::class, 'index'])->name('index');
+        Route::post('/verify', [AuditLogController::class, 'verify'])->name('verify');
+    });
 });

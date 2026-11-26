@@ -183,11 +183,16 @@
                             </span>
                         </div>
 
+                        @php
+                            $minTemp = $selectedDevice->configuration->min_temp_limit ?? 20;
+                            $maxTemp = $selectedDevice->configuration->max_temp_limit ?? 65;
+                            $cutoffTemp = $selectedDevice->configuration->critical_temp_cutoff ?? 70;
+                        @endphp
                         <div class="my-6 text-center">
                             <div class="text-5xl font-black text-slate-900 font-mono-numeric tracking-tight">
                                 {{ number_format($selectedDevice->current_temperature, 1) }}<span class="text-2xl text-slate-400 font-medium ml-1">°C</span>
                             </div>
-                            <div class="text-xs text-slate-500 mt-2">Batas Aman Mesin: 20°C s/d 65°C</div>
+                            <div class="text-xs text-slate-500 mt-2">Batas Suhu: {{ number_format($minTemp, 0) }}°C s/d {{ number_format($maxTemp, 0) }}°C</div>
                         </div>
 
                         <!-- Progress Bar Arc -->
@@ -196,13 +201,13 @@
                                 $tempPct = min(100, max(0, ($selectedDevice->current_temperature / 70) * 100));
                             @endphp
                             <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden p-0.5">
-                                <div class="h-2 rounded-full transition-all duration-500 {{ $selectedDevice->current_temperature > 65 ? 'bg-rose-600' : ($selectedDevice->current_temperature > 50 ? 'bg-amber-500' : 'bg-emerald-600') }}"
+                                <div class="h-2 rounded-full transition-all duration-500 {{ $selectedDevice->current_temperature > $maxTemp ? 'bg-rose-600' : ($selectedDevice->current_temperature > 50 ? 'bg-amber-500' : 'bg-emerald-600') }}"
                                     style="width: {{ $tempPct }}%"></div>
                             </div>
                             <div class="flex justify-between text-[10px] text-slate-400 font-mono-numeric mt-1.5">
-                                <span>0°C</span>
-                                <span>Ambang: 65°C</span>
-                                <span>Cutoff: 70°C</span>
+                                <span>Min: {{ number_format($minTemp, 0) }}°C</span>
+                                <span>Max: {{ number_format($maxTemp, 0) }}°C</span>
+                                <span>Cutoff: {{ number_format($cutoffTemp, 0) }}°C</span>
                             </div>
                         </div>
                     </div>
@@ -296,16 +301,47 @@
                                 </form>
                             </div>
 
-                            <!-- Timer Preset Selector Form -->
-                            <form method="POST" action="{{ route('admin.monitoring.send-command', $selectedDevice->id) }}" class="p-3.5 rounded-xl bg-slate-50 border border-slate-100">
+                            <!-- Timer Preset & Custom Hours Selector Form -->
+                            <form method="POST" action="{{ route('admin.monitoring.send-command', $selectedDevice->id) }}" class="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-2.5">
                                 @csrf
                                 <input type="hidden" name="command_type" value="SET_TIMER">
-                                <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-2">Atur Timer Penggilingan (ESP32 Local)</label>
+                                <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">Atur Durasi Komposter (Jam)</label>
                                 <div class="grid grid-cols-3 gap-2">
                                     <button type="submit" name="timer_minutes" value="120" class="py-1.5 px-2 rounded-lg bg-white border border-slate-200 hover:border-emerald-600 text-[11px] font-semibold text-slate-800 transition">2 Jam</button>
                                     <button type="submit" name="timer_minutes" value="180" class="py-1.5 px-2 rounded-lg bg-white border border-slate-200 hover:border-emerald-600 text-[11px] font-semibold text-slate-800 transition">3 Jam</button>
-                                    <button type="submit" name="timer_minutes" value="240" class="py-1.5 px-2 rounded-lg bg-emerald-50 border border-emerald-300 text-[11px] font-bold text-emerald-800 transition">4 Jam (Std)</button>
+                                    <button type="submit" name="timer_minutes" value="240" class="py-1.5 px-2 rounded-lg bg-emerald-50 border border-emerald-300 text-[11px] font-bold text-emerald-800 transition">4 Jam</button>
                                 </div>
+                                <div class="flex items-center gap-2 pt-1">
+                                    <input type="number" name="timer_hours" min="1" max="24" placeholder="Jam (1-24)"
+                                        class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 font-mono-numeric focus:outline-none focus:border-emerald-600">
+                                    <button type="submit" class="shrink-0 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-[11px] font-semibold transition">
+                                        Set Jam
+                                    </button>
+                                </div>
+                            </form>
+
+                            <!-- Temperature Upper & Lower Threshold Form -->
+                            <form method="POST" action="{{ route('admin.monitoring.send-command', $selectedDevice->id) }}" class="p-3.5 rounded-xl bg-slate-50 border border-slate-100 space-y-2.5">
+                                @csrf
+                                <input type="hidden" name="command_type" value="SET_TEMP_LIMIT">
+                                <label class="block text-[11px] font-bold text-slate-700 uppercase tracking-wider">Atur Batas Suhu (°C)</label>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <span class="block text-[10px] text-slate-500 mb-1">Batas Bawah (°C)</span>
+                                        <input type="number" step="0.5" min="10" max="45" name="min_temp"
+                                            value="{{ number_format($selectedDevice->configuration->min_temp_limit ?? 20, 1, '.', '') }}" required
+                                            class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 font-mono-numeric focus:outline-none focus:border-emerald-600">
+                                    </div>
+                                    <div>
+                                        <span class="block text-[10px] text-slate-500 mb-1">Batas Atas (°C)</span>
+                                        <input type="number" step="0.5" min="40" max="70" name="max_temp"
+                                            value="{{ number_format($selectedDevice->configuration->max_temp_limit ?? 65, 1, '.', '') }}" required
+                                            class="w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-900 font-mono-numeric focus:outline-none focus:border-emerald-600">
+                                    </div>
+                                </div>
+                                <button type="submit" class="w-full py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition">
+                                    Simpan Batas Suhu
+                                </button>
                             </form>
 
                             <!-- Emergency Stop Button -->
@@ -388,6 +424,77 @@
                 </div>
             </div>
         </div>
+
+        @if ($user->isAdminLapangan())
+            <!-- 6. ADMIN LAPANGAN SPECIFIC: ASSIGNED DUTY SCHEDULES & PERSONAL HISTORY (Section 5.4) -->
+            <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Today's Duty Schedule -->
+                <div class="bg-white rounded-2xl border border-emerald-200/80 p-5 shadow-xs bg-emerald-50/20">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <h3 class="text-sm font-bold text-slate-900">Jadwal Tugas Piket Saya Hari Ini</h3>
+                        </div>
+                        <span class="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">
+                            {{ now()->translatedFormat('l, d F Y') }}
+                        </span>
+                    </div>
+
+                    <div class="divide-y divide-emerald-100 text-xs">
+                        @forelse ($todaySchedules as $sched)
+                            <div class="py-3 flex items-center justify-between">
+                                <div>
+                                    <span class="font-bold font-mono-numeric text-slate-900">{{ substr($sched->start_time, 0, 5) }} - {{ substr($sched->end_time, 0, 5) }} WIB</span>
+                                    <p class="text-slate-600 mt-0.5">{{ $sched->notes ?? 'Piket operasional dan penimbangan sampah rutin.' }}</p>
+                                </div>
+                                <span class="inline-flex px-2 py-1 rounded text-[10px] font-bold bg-white text-emerald-800 border border-emerald-200">
+                                    Tugas Aktif
+                                </span>
+                            </div>
+                        @empty
+                            <div class="py-6 text-center text-slate-500">
+                                Tidak ada jadwal piket penugasan khusus untuk hari ini.
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
+
+                <!-- Personal Operation History -->
+                <div class="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-bold text-slate-900">Riwayat Pengoperasian Pribadi Saya</h3>
+                        <span class="text-[10px] font-semibold text-slate-400">5 Sesi Terakhir</span>
+                    </div>
+
+                    <div class="divide-y divide-slate-100 text-xs">
+                        @forelse ($myRecentSessions as $mySess)
+                            <div class="py-2.5 flex items-center justify-between">
+                                <div>
+                                    <div class="font-bold text-slate-900 font-mono-numeric">
+                                        {{ $mySess->device->device_code ?? '-' }} • Bobot Awal: {{ number_format($mySess->initial_weight, 1) }} Kg
+                                    </div>
+                                    <div class="text-[10px] text-slate-500">
+                                        {{ $mySess->started_at ? $mySess->started_at->translatedFormat('d M Y, H:i') : '-' }} &bull; Durasi: {{ $mySess->actual_duration_minutes ?? 240 }} mnt
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <span class="font-bold text-emerald-700 font-mono-numeric block">
+                                        -{{ number_format($mySess->weight_reduction_kg, 1) }} Kg
+                                    </span>
+                                    <span class="text-[10px] text-slate-500">
+                                        ({{ number_format($mySess->reduction_percentage, 1) }}% Reduksi)
+                                    </span>
+                                </div>
+                            </div>
+                        @empty
+                            <div class="py-6 text-center text-slate-400">
+                                Anda belum memiliki riwayat pengoperasian mesin yang tercatat.
+                            </div>
+                        @endforelse
+                    </div>
+                </div>
+            </div>
+        @endif
     @endif
 
 </x-admin-layout>

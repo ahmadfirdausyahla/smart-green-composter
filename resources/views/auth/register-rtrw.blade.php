@@ -1,4 +1,14 @@
 <x-guest-layout title="Pendaftaran Admin RT/RW — Smart Green Composter" heading="Pendaftaran Mandiri Admin RT/RW" subheading="Isi data wilayah dan administrasi lingkungan Anda untuk verifikasi Admin Kota">
+    <div class="mb-5">
+        <a href="{{ route('public.home') }}"
+            class="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-emerald-700 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+            <span>Kembali ke Beranda</span>
+        </a>
+    </div>
+
     <form method="POST" action="{{ route('register.rtrw') }}" class="space-y-4">
         @csrf
 

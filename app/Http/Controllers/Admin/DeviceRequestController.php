@@ -30,41 +30,67 @@ class DeviceRequestController extends Controller
     }
 
     /**
-     * Admin RT/RW: Submit request for additional device to City Admin.
+     * Admin RT/RW (ke Admin Kota) atau Admin Kota (ke Master Admin): Ajukan penambahan unit alat.
      */
     public function store(Request $request): RedirectResponse
     {
         $user = $request->user();
-        if (! $user->isAdminRtRw() || ! $user->neighborhood_id || ! $user->city_id) {
-            abort(403, 'Hanya Admin RT/RW yang dapat mengajukan penambahan perangkat.');
+
+        if ($user->isAdminRtRw() && $user->neighborhood_id && $user->city_id) {
+            $validated = $request->validate([
+                'requested_count' => ['required', 'integer', 'min:1', 'max:20'],
+                'reason' => ['required', 'string', 'min:5', 'max:1000'],
+            ]);
+
+            $devReq = DeviceRequest::create([
+                'city_id' => $user->city_id,
+                'neighborhood_id' => $user->neighborhood_id,
+                'requester_id' => $user->id,
+                'requested_count' => $validated['requested_count'],
+                'reason' => $validated['reason'],
+                'status' => 'pending',
+            ]);
+
+            AuditLog::record(
+                action: 'DEVICE_ADDITIONAL_REQUESTED',
+                description: "Admin RT/RW {$user->name} mengajukan penambahan {$validated['requested_count']} unit komposter.",
+                entityType: 'DeviceRequest',
+                entityId: $devReq->id
+            );
+
+            return back()->with('success', 'Pengajuan unit komposter berhasil dikirimkan ke Admin Kota.');
         }
 
-        $validated = $request->validate([
-            'requested_count' => ['required', 'integer', 'min:1', 'max:5'],
-            'reason' => ['required', 'string', 'min:10', 'max:1000'],
-        ]);
+        if ($user->isAdminKota() && $user->city_id) {
+            $validated = $request->validate([
+                'requested_count' => ['required', 'integer', 'min:1', 'max:100'],
+                'reason' => ['required', 'string', 'min:5', 'max:1000'],
+            ]);
 
-        $devReq = DeviceRequest::create([
-            'city_id' => $user->city_id,
-            'neighborhood_id' => $user->neighborhood_id,
-            'requester_id' => $user->id,
-            'requested_count' => $validated['requested_count'],
-            'reason' => $validated['reason'],
-            'status' => 'pending',
-        ]);
+            $devReq = DeviceRequest::create([
+                'city_id' => $user->city_id,
+                'neighborhood_id' => null,
+                'requester_id' => $user->id,
+                'requested_count' => $validated['requested_count'],
+                'reason' => $validated['reason'],
+                'status' => 'pending',
+            ]);
 
-        AuditLog::record(
-            action: 'DEVICE_ADDITIONAL_REQUESTED',
-            description: "Admin RT/RW {$user->name} mengajukan penambahan {$validated['requested_count']} unit komposter untuk wilayahnya.",
-            entityType: 'DeviceRequest',
-            entityId: $devReq->id
-        );
+            AuditLog::record(
+                action: 'DEVICE_CITY_STOCK_REQUESTED',
+                description: "Admin Kota {$user->name} mengajukan {$validated['requested_count']} unit komposter ke Master Admin.",
+                entityType: 'DeviceRequest',
+                entityId: $devReq->id
+            );
 
-        return back()->with('success', 'Permintaan penambahan unit komposter berhasil dikirimkan ke Admin Kota.');
+            return back()->with('success', 'Pengajuan stok kota berhasil dikirimkan ke Master Admin.');
+        }
+
+        abort(403, 'Anda tidak memiliki wewenang untuk mengajukan penambahan perangkat.');
     }
 
     /**
-     * Admin Kota: Update request status (Approved, Processing, Completed, Rejected).
+     * Master Admin / Admin Kota: Setujui (langsung arahkan ke Form Distribusi) atau Tolak pengajuan.
      */
     public function updateStatus(Request $request, DeviceRequest $deviceRequest): RedirectResponse
     {
@@ -91,6 +117,13 @@ class DeviceRequestController extends Controller
             entityId: $deviceRequest->id
         );
 
-        return back()->with('success', "Status permohonan penambahan unit telah diperbarui menjadi [{$validated['status']}].");
+        // Langsung arahkan ke Form Distribusi ketika disetujui agar tidak lupa mengirim alat
+        if ($validated['status'] === 'approved') {
+            return redirect()
+                ->route('admin.inventory.index', ['request_id' => $deviceRequest->id])
+                ->with('success', 'Pengajuan disetujui. Silakan konfirmasi pengiriman acak alat pada form distribusi di bawah.');
+        }
+
+        return back()->with('success', "Status permohonan unit diperbarui menjadi [{$validated['status']}].");
     }
 }

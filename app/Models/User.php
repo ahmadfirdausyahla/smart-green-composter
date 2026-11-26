@@ -64,7 +64,7 @@ class User extends Authenticatable
         return $this->belongsTo(Neighborhood::class);
     }
 
-    public function operationSessions(): HasMany
+    public function operatedSessions(): HasMany
     {
         return $this->hasMany(OperationSession::class, 'operator_id');
     }

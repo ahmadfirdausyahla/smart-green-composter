@@ -2,12 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Enums\DeviceHealthStatus;
-use App\Enums\DeviceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\DeviceCommand;
-use App\Models\SensorReading;
+use App\Services\IoT\IoTService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -17,7 +15,7 @@ class DeviceTelemetryController extends Controller
      * Ingest telemetry from ESP32.
      * Authenticated via API key in header or request body.
      */
-    public function ingest(Request $request): JsonResponse
+    public function ingest(Request $request, IoTService $iotService): JsonResponse
     {
         $apiKey = $request->header('X-Device-Key') ?? $request->input('api_key');
 
@@ -30,56 +28,8 @@ class DeviceTelemetryController extends Controller
             return response()->json(['error' => 'Perangkat tidak terdaftar.'], 403);
         }
 
-        $temperature = (float) $request->input('temperature', 0.0);
-        $weight = (float) $request->input('weight', 0.0);
-        $motorState = (bool) $request->input('motor_state', false);
-        $heaterState = (bool) $request->input('heater_state', false);
-        $timerRemaining = (int) $request->input('timer_remaining_sec', 0);
-        $sensorStatus = $request->input('sensor_status', []);
-
-        // Status Determination
-        $status = DeviceStatus::IDLE;
-        if ($motorState || $heaterState) {
-            $status = DeviceStatus::RUNNING;
-        }
-
-        // Safety Threshold Check (Overheat Warning)
-        $config = $device->configuration;
-        $maxLimit = $config ? $config->max_temp_limit : 65.0;
-        $cutoffLimit = $config ? $config->critical_temp_cutoff : 70.0;
-
-        if ($temperature >= $cutoffLimit) {
-            $status = DeviceStatus::CRITICAL;
-        } elseif ($temperature >= $maxLimit) {
-            $status = DeviceStatus::WARNING;
-        }
-
-        // Sensor Fault Detection
-        $health = DeviceHealthStatus::HEALTHY;
-        if ($temperature < -50 || $temperature > 150 || $weight < 0) {
-            $health = DeviceHealthStatus::SENSOR_FAULT;
-        }
-
-        // Update Device State
-        $device->update([
-            'current_status' => $status,
-            'health_status' => $health,
-            'current_temperature' => $temperature,
-            'current_weight' => $weight,
-            'last_heartbeat_at' => now(),
-        ]);
-
-        // Record Sensor History
-        SensorReading::create([
-            'device_id' => $device->id,
-            'temperature' => $temperature,
-            'weight' => $weight,
-            'motor_running' => $motorState,
-            'heater_running' => $heaterState,
-            'timer_remaining_sec' => $timerRemaining,
-            'sensor_status' => $sensorStatus,
-            'recorded_at' => now(),
-        ]);
+        // Process telemetry using IoT Provider abstraction layer
+        $reading = $iotService->processTelemetry($device, $request->all());
 
         // Check if there is any pending queued command for this device
         $pendingCommand = DeviceCommand::where('device_id', $device->id)
@@ -105,6 +55,7 @@ class DeviceTelemetryController extends Controller
             'status' => 'success',
             'device_code' => $device->device_code,
             'server_time' => now()->timestamp,
+            'reading' => $reading->toArray(),
             'pending_command' => $cmdPayload,
         ]);
     }

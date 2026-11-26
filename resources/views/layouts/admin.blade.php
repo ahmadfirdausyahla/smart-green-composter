@@ -84,7 +84,7 @@
                 </a>
             @endif
 
-            <!-- 2. Monitoring & Remote Control (Semua Role) -->
+            <!-- 2. Monitoring & Remote Control (Menu 1 untuk Admin Lapangan & Semua Role) -->
             <a href="{{ route('admin.monitoring.index') }}"
                 class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.monitoring.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                 <svg class="w-4 h-4 {{ request()->routeIs('admin.monitoring.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +106,7 @@
                 </a>
             @endif
 
-            <!-- 4. Kondisi Alat & Laporan (Semua Role) -->
+            <!-- 4. Kondisi Alat & Laporan Kerusakan (Menu 2 untuk Admin Lapangan & Semua Role) -->
             <a href="{{ route('admin.maintenance.index') }}"
                 class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.maintenance.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                 <svg class="w-4 h-4 {{ request()->routeIs('admin.maintenance.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,8 +115,19 @@
                 <span>Kondisi Alat & Kerusakan</span>
             </a>
 
+            @if (! $isLapangan)
+                <!-- 5. Laporan & Reduksi Massa (Section 21) -->
+                <a href="{{ route('admin.reports.index') }}"
+                    class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.reports.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
+                    <svg class="w-4 h-4 {{ request()->routeIs('admin.reports.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span>Laporan & Analitik</span>
+                </a>
+            @endif
+
             @if ($isMaster || $isKota)
-                <!-- 5. Verifikasi Pendaftaran RT/RW -->
+                <!-- 6. Verifikasi Pendaftaran RT/RW -->
                 <a href="{{ route('admin.registration-requests.index') }}"
                     class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.registration-requests.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                     <svg class="w-4 h-4 {{ request()->routeIs('admin.registration-requests.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -125,7 +136,7 @@
                     <span>Pendaftaran RT/RW</span>
                 </a>
 
-                <!-- 6. Inventaris & Distribusi -->
+                <!-- 7. Inventaris & Distribusi -->
                 <a href="{{ route('admin.inventory.index') }}"
                     class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.inventory.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                     <svg class="w-4 h-4 {{ request()->routeIs('admin.inventory.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -136,7 +147,7 @@
             @endif
 
             @if ($isRtRw || $isKota || $isMaster)
-                <!-- 7. Permintaan Unit Alat -->
+                <!-- 8. Permintaan Unit Alat -->
                 <a href="{{ route('admin.device-requests.index') }}"
                     class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.device-requests.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                     <svg class="w-4 h-4 {{ request()->routeIs('admin.device-requests.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -146,19 +157,19 @@
                 </a>
             @endif
 
-            @if ($isRtRw || $isLapangan)
-                <!-- 8. Jadwal Petugas Piket -->
+            @if ($isRtRw || $isMaster)
+                <!-- 9. Jadwal Petugas Piket (Dikelola oleh RT/RW) -->
                 <a href="{{ route('admin.schedules.index') }}"
                     class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.schedules.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                     <svg class="w-4 h-4 {{ request()->routeIs('admin.schedules.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                     </svg>
-                    <span>{{ $isLapangan ? 'Jadwal Tugas Saya' : 'Jadwal Petugas' }}</span>
+                    <span>Jadwal Petugas</span>
                 </a>
             @endif
 
             @if ($isMaster || $isKota)
-                <!-- 9. Kelola Basis Pengetahuan AI -->
+                <!-- 10. Kelola Basis Pengetahuan AI -->
                 <a href="{{ route('admin.knowledge-base.index') }}"
                     class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.knowledge-base.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                     <svg class="w-4 h-4 {{ request()->routeIs('admin.knowledge-base.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -167,7 +178,7 @@
                     <span>Knowledge Base AI</span>
                 </a>
 
-                <!-- 10. Audit Log Sistem -->
+                <!-- 11. Audit Log Sistem -->
                 <a href="{{ route('admin.audit-logs.index') }}"
                     class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.audit-logs.*') ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'text-slate-600 hover:bg-slate-100/80 hover:text-slate-900' }}">
                     <svg class="w-4 h-4 {{ request()->routeIs('admin.audit-logs.*') ? 'text-emerald-600' : 'text-slate-400' }}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -176,15 +187,7 @@
                     <span>Audit Log</span>
                 </a>
             @endif
-
-            <!-- 11. Simulator IoT ESP32 (Dev Testing - Rule 21.9) -->
-            <a href="{{ route('admin.iot-simulator.index') }}"
-                class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold transition {{ request()->routeIs('admin.iot-simulator.*') ? 'bg-amber-50 text-amber-900 border border-amber-300' : 'text-amber-700 hover:bg-amber-50/60' }}">
-                <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
-                </svg>
-                <span>Simulator IoT (Dev)</span>
-            </a>
+        </nav>
 
             <!-- Divider -->
             <div class="pt-3 pb-1">

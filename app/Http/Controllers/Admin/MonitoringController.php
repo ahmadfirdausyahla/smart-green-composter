@@ -9,6 +9,10 @@ use App\Models\Device;
 use App\Models\DeviceCommand;
 use App\Models\OperationPermission;
 use App\Models\Province;
+use App\Models\Schedule;
+use App\Services\Audit\AuditService;
+use App\Services\IoT\DTOs\DeviceCommandDTO;
+use App\Services\IoT\IoTService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -77,6 +81,15 @@ class MonitoringController extends Controller
             ? $selectedDevice->operationSessions()->with('operator')->latest('started_at')->limit(4)->get()
             : collect();
 
+        // 7. For Admin Lapangan: Assigned schedules & personal history (Section 5.4)
+        $todaySchedules = $user->isAdminLapangan()
+            ? Schedule::where('operator_id', $user->id)->whereDate('duty_date', now()->toDateString())->get()
+            : collect();
+
+        $myRecentSessions = $user->isAdminLapangan()
+            ? $user->operatedSessions()->with('device')->latest('started_at')->limit(5)->get()
+            : collect();
+
         return view('admin.monitoring.index', compact(
             'user',
             'devices',
@@ -85,7 +98,9 @@ class MonitoringController extends Controller
             'activePermission',
             'provinces',
             'recentCommands',
-            'recentSessions'
+            'recentSessions',
+            'todaySchedules',
+            'myRecentSessions'
         ));
     }
 
@@ -120,20 +135,23 @@ class MonitoringController extends Controller
             'notes' => $validated['notes'] ?? null,
         ]);
 
-        AuditLog::record(
+        AuditService::record(
             action: 'OPERATION_PERMISSION_REQUESTED',
             description: "Pengguna {$user->name} mengajukan izin kendali {$validated['action_type']} untuk perangkat {$device->device_code}.",
+            category: 'ACCESS_CONTROL',
             entityType: 'OperationPermission',
-            entityId: $permission->id
+            entityId: $permission->id,
+            deviceId: $device->id,
+            approvalId: $permission->id
         );
 
         return back()->with('success', 'Permintaan izin kendali telah dikirimkan ke Admin RT/RW pemilik perangkat.');
     }
 
     /**
-     * Issue command to ESP32 (Queued with strict verification).
+     * Issue command to ESP32 / IoT Service (Queued with strict verification).
      */
-    public function sendCommand(Request $request, Device $device): RedirectResponse
+    public function sendCommand(Request $request, Device $device, IoTService $iotService): RedirectResponse
     {
         $user = $request->user();
 
@@ -156,18 +174,32 @@ class MonitoringController extends Controller
 
         $validated = $request->validate([
             'command_type' => ['required', 'in:POWER_ON,POWER_OFF,SET_TIMER,SET_TEMP_LIMIT,EMERGENCY_STOP'],
-            'timer_minutes' => ['nullable', 'integer', 'min:30', 'max:480'],
+            'timer_minutes' => ['nullable', 'integer', 'min:30', 'max:1440'],
+            'timer_hours' => ['nullable', 'integer', 'min:1', 'max:24'],
+            'min_temp' => ['nullable', 'numeric', 'min:10', 'max:45'],
             'max_temp' => ['nullable', 'numeric', 'min:40', 'max:70'],
         ]);
 
         $params = [];
         if ($validated['command_type'] === 'POWER_ON') {
-            $params['timer_minutes'] = $validated['timer_minutes'] ?? 240;
+            $timerMinutes = $validated['timer_minutes']
+                ?? (! empty($validated['timer_hours']) ? (int) $validated['timer_hours'] * 60 : 240);
+            $params['timer_minutes'] = $timerMinutes;
             $params['initial_weight'] = $device->current_weight;
         } elseif ($validated['command_type'] === 'SET_TIMER') {
-            $params['timer_minutes'] = $validated['timer_minutes'] ?? 240;
+            $timerMinutes = $validated['timer_minutes']
+                ?? (! empty($validated['timer_hours']) ? (int) $validated['timer_hours'] * 60 : 240);
+            $params['timer_minutes'] = $timerMinutes;
         } elseif ($validated['command_type'] === 'SET_TEMP_LIMIT') {
-            $params['max_temp'] = $validated['max_temp'] ?? 65.0;
+            $minTemp = (float) ($validated['min_temp'] ?? ($device->configuration->min_temp_limit ?? 20.0));
+            $maxTemp = (float) ($validated['max_temp'] ?? ($device->configuration->max_temp_limit ?? 65.0));
+
+            if ($minTemp >= $maxTemp) {
+                return back()->with('error', 'Suhu batas bawah harus lebih kecil daripada suhu batas atas.');
+            }
+
+            $params['min_temp'] = $minTemp;
+            $params['max_temp'] = $maxTemp;
         }
 
         $cmd = DeviceCommand::create([
@@ -178,13 +210,40 @@ class MonitoringController extends Controller
             'status' => 'queued',
         ]);
 
-        AuditLog::record(
+        AuditService::record(
             action: 'DEVICE_COMMAND_ISSUED',
             description: "Perintah {$validated['command_type']} dikirim ke perangkat {$device->device_code} oleh {$user->name}.",
+            category: 'IOT_CONTROL',
             entityType: 'DeviceCommand',
-            entityId: $cmd->id
+            entityId: $cmd->id,
+            deviceId: $device->id,
+            commandId: $cmd->id,
+            newValues: $params,
+            metadata: ['driver' => config('services.iot.driver', 'mock')]
         );
 
-        return back()->with('success', "Instruksi {$validated['command_type']} berhasil dimasukkan ke antrean perangkat {$device->device_code}. Menunggu konfirmasi ESP32.");
+        // Process through IoT Provider
+        $cmdDto = new DeviceCommandDTO(
+            commandId: $cmd->id,
+            deviceId: $device->id,
+            command: $validated['command_type'],
+            parameters: $params,
+            requestedBy: $user->id
+        );
+
+        $ack = $iotService->sendCommand($device, $cmdDto);
+
+        if ($ack->status === 'executed' || $ack->status === 'acknowledged') {
+            $cmd->update([
+                'status' => $ack->status,
+                'sent_at' => now(),
+                'acknowledged_at' => now(),
+                'response_payload' => json_encode($ack->toArray()),
+            ]);
+
+            return back()->with('success', "Instruksi {$validated['command_type']} berhasil dieksekusi ({$ack->message}).");
+        }
+
+        return back()->with('success', "Instruksi {$validated['command_type']} dimasukkan ke antrean perangkat {$device->device_code}. Menunggu konfirmasi.");
     }
 }

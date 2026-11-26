@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Services\Audit\AuditService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use RuntimeException;
 
 class AuditLog extends Model
 {
@@ -14,14 +16,23 @@ class AuditLog extends Model
 
     protected $fillable = [
         'user_id',
+        'actor_role',
         'action',
+        'category',
         'entity_type',
         'entity_id',
+        'device_id',
+        'command_id',
+        'approval_id',
         'ip_address',
         'user_agent',
         'old_values',
         'new_values',
         'description',
+        'result',
+        'metadata',
+        'previous_hash',
+        'current_hash',
         'created_at',
     ];
 
@@ -30,13 +41,31 @@ class AuditLog extends Model
         return [
             'old_values' => 'array',
             'new_values' => 'array',
+            'metadata' => 'array',
             'created_at' => 'datetime',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        // Enforce append-only requirement at ORM level (Section 19)
+        static::updating(function () {
+            throw new RuntimeException('Audit logs are append-only and immutable. Modifications are strictly forbidden.');
+        });
+
+        static::deleting(function () {
+            throw new RuntimeException('Audit logs are tamper-evident and append-only. Deletions are strictly forbidden.');
+        });
     }
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function device(): BelongsTo
+    {
+        return $this->belongsTo(Device::class);
     }
 
     public static function record(
@@ -46,19 +75,28 @@ class AuditLog extends Model
         ?int $entityId = null,
         ?array $oldValues = null,
         ?array $newValues = null,
-        ?int $userId = null
+        ?int $userId = null,
+        string $category = 'SYSTEM',
+        ?int $deviceId = null,
+        ?int $commandId = null,
+        ?int $approvalId = null,
+        ?array $metadata = null,
+        string $result = 'SUCCESS'
     ): self {
-        return self::create([
-            'user_id' => $userId ?? auth()->id(),
-            'action' => $action,
-            'entity_type' => $entityType,
-            'entity_id' => $entityId,
-            'ip_address' => request()->ip(),
-            'user_agent' => request()->userAgent(),
-            'old_values' => $oldValues,
-            'new_values' => $newValues,
-            'description' => $description,
-            'created_at' => now(),
-        ]);
+        return AuditService::record(
+            action: $action,
+            description: $description,
+            category: $category,
+            entityType: $entityType,
+            entityId: $entityId,
+            deviceId: $deviceId,
+            commandId: $commandId,
+            approvalId: $approvalId,
+            oldValues: $oldValues,
+            newValues: $newValues,
+            metadata: $metadata,
+            result: $result,
+            userId: $userId
+        );
     }
 }

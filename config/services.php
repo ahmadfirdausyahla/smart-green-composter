@@ -35,4 +35,20 @@ return [
         ],
     ],
 
+    'iot' => [
+        'driver' => env('IOT_DRIVER', 'mock'),
+        'base_url' => env('IOT_API_BASE_URL', ''),
+        'token' => env('IOT_API_TOKEN', ''),
+        'webhook_secret' => env('IOT_WEBHOOK_SECRET', ''),
+        'timeout' => env('IOT_API_TIMEOUT', 10),
+    ],
+
+    'ai' => [
+        'driver' => env('AI_DRIVER', 'mock'),
+        'api_key' => env('AI_API_KEY', ''),
+        'base_url' => env('AI_BASE_URL', 'https://api.openai.com/v1'),
+        'model' => env('AI_MODEL', 'gpt-4o-mini'),
+        'timeout' => env('AI_TIMEOUT', 30),
+    ],
+
 ];

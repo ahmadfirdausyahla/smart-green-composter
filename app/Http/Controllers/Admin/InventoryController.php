@@ -9,7 +9,7 @@ use App\Models\AuditLog;
 use App\Models\City;
 use App\Models\Device;
 use App\Models\DeviceConfiguration;
-use App\Models\DeviceInventory;
+use App\Models\DeviceRequest;
 use App\Models\InventoryTransaction;
 use App\Models\Neighborhood;
 use Illuminate\Http\RedirectResponse;
@@ -24,18 +24,25 @@ class InventoryController extends Controller
     {
         $user = $request->user();
 
-        // 1. Central Inventory Stocks (Master Admin)
-        $centralInventories = DeviceInventory::with('city')->get();
+        // 1. Available Central Stock Devices (unassigned to any city or RT/RW)
+        $centralAvailableDevices = Device::whereNull('city_id')
+            ->whereNull('neighborhood_id')
+            ->orderBy('device_code')
+            ->get();
+        $centralStock = $centralAvailableDevices->count();
 
-        // 2. City Specific Stocks
-        $cityStock = 0;
+        // 2. Available City Stock Devices (assigned to user's city, not yet assigned to RT/RW)
+        $cityAvailableDevices = collect();
         if ($user->isAdminKota() && $user->city_id) {
-            $cityInv = DeviceInventory::where('city_id', $user->city_id)->first();
-            $cityStock = $cityInv ? $cityInv->city_stock : 0;
+            $cityAvailableDevices = Device::where('city_id', $user->city_id)
+                ->whereNull('neighborhood_id')
+                ->orderBy('device_code')
+                ->get();
         }
+        $cityStock = $cityAvailableDevices->count();
 
-        // 3. Devices based on jurisdiction
-        $devicesQuery = Device::with(['city', 'neighborhood.village']);
+        // 3. Devices list based on jurisdiction
+        $devicesQuery = Device::with(['city', 'neighborhood.village'])->latest();
         if ($user->isAdminKota()) {
             $devicesQuery->where('city_id', $user->city_id);
         }
@@ -50,25 +57,56 @@ class InventoryController extends Controller
         }
 
         // 5. Cities list (for Master Admin allocation dropdown)
-        $cities = $user->isMasterAdmin() ? City::all() : collect();
+        $cities = $user->isMasterAdmin() ? City::with('province')->get() : collect();
 
-        // 6. Transactions history
-        $transactionsQuery = InventoryTransaction::with(['device', 'performedBy'])->latest();
-        $transactions = $transactionsQuery->limit(10)->get();
+        // 6. Pending DeviceRequest passed from "Setujui & Distribusi"
+        $pendingRequest = null;
+        $preselectedDeviceIds = [];
+        if ($request->filled('request_id')) {
+            $candidate = DeviceRequest::with(['city', 'neighborhood.village', 'requester'])
+                ->find($request->query('request_id'));
+
+            if ($candidate && in_array($candidate->status, ['pending', 'approved', 'processing'])) {
+                $isAuthorized = $user->isMasterAdmin()
+                    || ($user->isAdminKota() && (int) $candidate->city_id === (int) $user->city_id && $candidate->neighborhood_id !== null);
+
+                if ($isAuthorized) {
+                    $pendingRequest = $candidate;
+                    $pool = $candidate->neighborhood_id === null
+                        ? $centralAvailableDevices
+                        : $cityAvailableDevices;
+
+                    $preselectedDeviceIds = $pool->shuffle()
+                        ->take($candidate->requested_count)
+                        ->pluck('id')
+                        ->all();
+                }
+            }
+        }
+
+        // 7. Transactions history
+        $transactions = InventoryTransaction::with(['device', 'performedBy'])
+            ->latest()
+            ->limit(10)
+            ->get();
 
         return view('admin.inventory.index', compact(
             'user',
-            'centralInventories',
+            'centralAvailableDevices',
+            'centralStock',
+            'cityAvailableDevices',
             'cityStock',
             'devices',
             'neighborhoods',
             'cities',
-            'transactions'
+            'transactions',
+            'pendingRequest',
+            'preselectedDeviceIds'
         ));
     }
 
     /**
-     * Master Admin: Add stock to central inventory.
+     * Master Admin: Tambah 1 alat baru dengan Nama Alat yang unik (1 nama = 1 alat).
      */
     public function addCentralStock(Request $request): RedirectResponse
     {
@@ -78,131 +116,26 @@ class InventoryController extends Controller
         }
 
         $validated = $request->validate([
-            'model_name' => ['required', 'string', 'max:100'],
-            'quantity' => ['required', 'integer', 'min:1', 'max:500'],
+            'device_name' => ['required', 'string', 'max:100', 'unique:devices,device_code'],
             'notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'device_name.unique' => 'Nama alat sudah digunakan. Setiap alat harus memiliki nama unik yang berbeda.',
         ]);
 
-        $inv = DeviceInventory::firstOrCreate(
-            ['model_name' => $validated['model_name'], 'city_id' => null],
-            ['central_stock' => 0]
-        );
-        $inv->increment('central_stock', $validated['quantity']);
-
-        InventoryTransaction::create([
-            'transaction_type' => 'central_in',
-            'from_entity' => 'Pabrik / Vendor Manufaktur',
-            'to_entity' => 'Gudang Pusat ZeroWaste Green',
-            'performed_by' => $user->id,
-            'notes' => "Penambahan {$validated['quantity']} unit {$validated['model_name']}. {$validated['notes']}",
-        ]);
-
-        AuditLog::record(
-            action: 'CENTRAL_STOCK_ADDED',
-            description: "Master Admin {$user->name} menambah {$validated['quantity']} unit {$validated['model_name']} ke stok pusat.",
-            entityType: 'DeviceInventory',
-            entityId: $inv->id
-        );
-
-        return back()->with('success', "Berhasil menambahkan {$validated['quantity']} unit ke stok pusat.");
-    }
-
-    /**
-     * Master Admin: Allocate stock from Central to City.
-     */
-    public function allocateToCity(Request $request): RedirectResponse
-    {
-        $user = $request->user();
-        if (! $user->isMasterAdmin()) {
-            abort(403);
-        }
-
-        $validated = $request->validate([
-            'city_id' => ['required', 'exists:cities,id'],
-            'model_name' => ['required', 'string'],
-            'quantity' => ['required', 'integer', 'min:1'],
-        ]);
-
-        $centralInv = DeviceInventory::where('model_name', $validated['model_name'])
-            ->whereNull('city_id')
-            ->first();
-
-        if (! $centralInv || $centralInv->central_stock < $validated['quantity']) {
-            return back()->with('error', 'Stok pusat tidak mencukupi untuk jumlah yang diminta.');
-        }
-
-        $city = City::findOrFail($validated['city_id']);
-
-        DB::transaction(function () use ($centralInv, $city, $validated, $user) {
-            $centralInv->decrement('central_stock', $validated['quantity']);
-
-            $cityInv = DeviceInventory::firstOrCreate(
-                ['model_name' => $validated['model_name'], 'city_id' => $city->id],
-                ['city_stock' => 0]
-            );
-            $cityInv->increment('city_stock', $validated['quantity']);
-
-            InventoryTransaction::create([
-                'transaction_type' => 'city_allocation',
-                'from_entity' => 'Gudang Pusat',
-                'to_entity' => "Gudang {$city->name}",
-                'performed_by' => $user->id,
-                'notes' => "Alokasi {$validated['quantity']} unit ke {$city->name}.",
-            ]);
-
-            AuditLog::record(
-                action: 'STOCK_ALLOCATED_TO_CITY',
-                description: "Master Admin {$user->name} mengalokasikan {$validated['quantity']} unit {$validated['model_name']} ke {$city->name}."
-            );
-        });
-
-        return back()->with('success', "Berhasil mengalokasikan {$validated['quantity']} unit ke {$city->name}.");
-    }
-
-    /**
-     * Admin Kota: Distribute unit to a specific RT/RW.
-     */
-    public function distributeToRtRw(Request $request): RedirectResponse
-    {
-        $user = $request->user();
-        if (! $user->isAdminKota()) {
-            abort(403);
-        }
-
-        $validated = $request->validate([
-            'neighborhood_id' => ['required', 'exists:neighborhoods,id'],
-            'model_name' => ['required', 'string'],
-        ]);
-
-        $cityInv = DeviceInventory::where('city_id', $user->city_id)
-            ->where('model_name', $validated['model_name'])
-            ->first();
-
-        if (! $cityInv || $cityInv->city_stock < 1) {
-            return back()->with('error', 'Stok gudang kota Anda habis. Silakan ajukan penambahan stok ke Master Admin terlebih dahulu.');
-        }
-
-        $neighborhood = Neighborhood::findOrFail($validated['neighborhood_id']);
-
-        DB::transaction(function () use ($cityInv, $neighborhood, $validated, $user) {
-            $cityInv->decrement('city_stock', 1);
-
-            $cityCode = $user->city ? strtoupper(substr($user->city->name, 0, 3)) : 'DEV';
-            $deviceCount = Device::where('city_id', $user->city_id)->count() + 1;
-            $code = sprintf('SGC-%s-%03d', $cityCode, $deviceCount);
-            $serial = sprintf('SN-%d-%s-%04d', date('Y'), $cityCode, $deviceCount);
+        DB::transaction(function () use ($validated, $user) {
+            $serial = 'SN-' . date('Y') . '-' . strtoupper(Str::random(6));
 
             $device = Device::create([
                 'serial_number' => $serial,
-                'device_code' => $code,
-                'model_name' => $validated['model_name'],
+                'device_code' => $validated['device_name'],
+                'model_name' => $validated['device_name'],
                 'api_key' => Str::random(32),
-                'city_id' => $user->city_id,
-                'neighborhood_id' => $neighborhood->id,
+                'city_id' => null,
+                'neighborhood_id' => null,
                 'current_status' => DeviceStatus::IDLE,
                 'health_status' => DeviceHealthStatus::HEALTHY,
-                'installed_at' => now(),
-                'is_publicly_visible' => true,
+                'is_publicly_visible' => false,
+                'notes' => $validated['notes'] ?? null,
             ]);
 
             DeviceConfiguration::create([
@@ -216,22 +149,246 @@ class InventoryController extends Controller
             ]);
 
             InventoryTransaction::create([
-                'transaction_type' => 'rtrw_deployment',
+                'transaction_type' => 'central_in',
                 'device_id' => $device->id,
-                'from_entity' => "Gudang {$user->city->name}",
-                'to_entity' => "RT {$neighborhood->rt_number} / RW {$neighborhood->rw_number} ({$neighborhood->village->name})",
+                'from_entity' => 'Pabrik / Vendor Manufaktur',
+                'to_entity' => 'Gudang Pusat ZeroWaste Green',
                 'performed_by' => $user->id,
-                'notes' => "Pemasangan unit baru {$code} di lingkungan warga.",
+                'notes' => "Registrasi alat baru: {$validated['device_name']}. " . ($validated['notes'] ?? ''),
             ]);
 
             AuditLog::record(
-                action: 'DEVICE_DISTRIBUTED_TO_RTRW',
-                description: "Admin Kota {$user->name} mendistribusikan unit {$code} ke RT {$neighborhood->rt_number} / RW {$neighborhood->rw_number}.",
+                action: 'CENTRAL_STOCK_ADDED',
+                description: "Master Admin {$user->name} menambahkan alat baru {$validated['device_name']} ke stok pusat.",
                 entityType: 'Device',
                 entityId: $device->id
             );
         });
 
-        return back()->with('success', "Unit komposter berhasil dipasang dan dihubungkan ke lingkungan RT {$neighborhood->rt_number} / RW {$neighborhood->rw_number}.");
+        return back()->with('success', "Alat \"{$validated['device_name']}\" berhasil ditambahkan ke stok pusat.");
+    }
+
+    /**
+     * Master Admin: Update Nama Alat & catatan perangkat.
+     */
+    public function updateDevice(Request $request, Device $device): RedirectResponse
+    {
+        if (! $request->user()->isMasterAdmin()) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'device_name' => ['required', 'string', 'max:100', 'unique:devices,device_code,' . $device->id],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'device_name.unique' => 'Nama alat sudah digunakan oleh perangkat lain.',
+        ]);
+
+        $oldName = $device->device_code;
+        $device->update([
+            'device_code' => $validated['device_name'],
+            'model_name' => $validated['device_name'],
+            'notes' => $validated['notes'] ?? $device->notes,
+        ]);
+
+        AuditLog::record(
+            action: 'DEVICE_UPDATED',
+            description: "Master Admin {$request->user()->name} mengubah nama alat {$oldName} menjadi {$validated['device_name']}.",
+            entityType: 'Device',
+            entityId: $device->id
+        );
+
+        return back()->with('success', "Data alat \"{$validated['device_name']}\" berhasil diperbarui.");
+    }
+
+    /**
+     * Master Admin: Hapus alat yang belum terpasang di RT/RW.
+     */
+    public function destroyDevice(Request $request, Device $device): RedirectResponse
+    {
+        if (! $request->user()->isMasterAdmin()) {
+            abort(403);
+        }
+
+        if ($device->neighborhood_id !== null) {
+            return back()->with('error', 'Alat yang sudah terpasang di RT/RW tidak dapat dihapus langsung.');
+        }
+
+        $name = $device->device_code;
+        $device->delete();
+
+        AuditLog::record(
+            action: 'DEVICE_DELETED',
+            description: "Master Admin {$request->user()->name} menghapus alat {$name} dari inventaris."
+        );
+
+        return back()->with('success', "Alat \"{$name}\" berhasil dihapus.");
+    }
+
+    /**
+     * Master Admin: Alokasikan alat secara acak (atau pilihan) dari Gudang Pusat ke Kota.
+     */
+    public function allocateToCity(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        if (! $user->isMasterAdmin()) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'city_id' => ['required', 'exists:cities,id'],
+            'quantity' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'device_ids' => ['nullable', 'array'],
+            'device_ids.*' => ['integer', 'exists:devices,id'],
+            'device_request_id' => ['nullable', 'exists:device_requests,id'],
+        ]);
+
+        $city = City::findOrFail($validated['city_id']);
+
+        if (! empty($validated['device_ids'])) {
+            $pickedDevices = Device::whereNull('city_id')
+                ->whereNull('neighborhood_id')
+                ->whereIn('id', $validated['device_ids'])
+                ->get();
+        } else {
+            $qty = (int) ($validated['quantity'] ?? 1);
+            $pickedDevices = Device::whereNull('city_id')
+                ->whereNull('neighborhood_id')
+                ->inRandomOrder()
+                ->limit($qty)
+                ->get();
+
+            if ($pickedDevices->count() < $qty) {
+                return back()->with('error', "Stok alat di Gudang Pusat tidak mencukupi (tersedia {$pickedDevices->count()} unit, diminta {$qty} unit).");
+            }
+        }
+
+        if ($pickedDevices->isEmpty()) {
+            return back()->with('error', 'Tidak ada unit alat tersedia di Gudang Pusat untuk dialokasikan.');
+        }
+
+        $deviceNames = $pickedDevices->pluck('device_code')->implode(', ');
+
+        DB::transaction(function () use ($pickedDevices, $city, $user, $deviceNames, $validated) {
+            foreach ($pickedDevices as $device) {
+                $device->update(['city_id' => $city->id]);
+
+                InventoryTransaction::create([
+                    'transaction_type' => 'city_allocation',
+                    'device_id' => $device->id,
+                    'from_entity' => 'Gudang Pusat',
+                    'to_entity' => "Gudang {$city->name}",
+                    'performed_by' => $user->id,
+                    'notes' => "Alokasi acak unit {$device->device_code} ke {$city->name}.",
+                ]);
+            }
+
+            if (! empty($validated['device_request_id'])) {
+                $devReq = DeviceRequest::find($validated['device_request_id']);
+                if ($devReq) {
+                    $devReq->update([
+                        'status' => 'completed',
+                        'reviewed_by' => $user->id,
+                        'review_notes' => "Disetujui & dikirim acak ke {$city->name}: {$deviceNames}",
+                    ]);
+                }
+            }
+
+            AuditLog::record(
+                action: 'STOCK_ALLOCATED_TO_CITY',
+                description: "Master Admin {$user->name} mengalokasikan {$pickedDevices->count()} unit ({$deviceNames}) ke {$city->name}."
+            );
+        });
+
+        return redirect()->route('admin.inventory.index')
+            ->with('success', "Berhasil mengirim {$pickedDevices->count()} unit ({$deviceNames}) ke {$city->name}.");
+    }
+
+    /**
+     * Admin Kota (atau Master Admin): Distribusikan alat secara acak (atau pilihan) dari stok kota ke RT/RW.
+     */
+    public function distributeToRtRw(Request $request): RedirectResponse
+    {
+        $user = $request->user();
+        if (! $user->isAdminKota() && ! $user->isMasterAdmin()) {
+            abort(403);
+        }
+
+        $validated = $request->validate([
+            'neighborhood_id' => ['required', 'exists:neighborhoods,id'],
+            'quantity' => ['nullable', 'integer', 'min:1', 'max:50'],
+            'device_ids' => ['nullable', 'array'],
+            'device_ids.*' => ['integer', 'exists:devices,id'],
+            'device_request_id' => ['nullable', 'exists:device_requests,id'],
+        ]);
+
+        $neighborhood = Neighborhood::with('village.district')->findOrFail($validated['neighborhood_id']);
+        $targetCityId = $user->isAdminKota() ? $user->city_id : $neighborhood->village->district->city_id;
+
+        if (! empty($validated['device_ids'])) {
+            $pickedDevices = Device::where('city_id', $targetCityId)
+                ->whereNull('neighborhood_id')
+                ->whereIn('id', $validated['device_ids'])
+                ->get();
+        } else {
+            $qty = (int) ($validated['quantity'] ?? 1);
+            $pickedDevices = Device::where('city_id', $targetCityId)
+                ->whereNull('neighborhood_id')
+                ->inRandomOrder()
+                ->limit($qty)
+                ->get();
+
+            if ($pickedDevices->count() < $qty) {
+                return back()->with('error', "Stok gudang kota tidak mencukupi (tersedia {$pickedDevices->count()} unit, diminta {$qty} unit).");
+            }
+        }
+
+        if ($pickedDevices->isEmpty()) {
+            return back()->with('error', 'Stok gudang kota Anda habis. Silakan ajukan penambahan alat ke Master Admin terlebih dahulu.');
+        }
+
+        $deviceNames = $pickedDevices->pluck('device_code')->implode(', ');
+
+        DB::transaction(function () use ($pickedDevices, $neighborhood, $user, $deviceNames, $validated) {
+            foreach ($pickedDevices as $device) {
+                $device->update([
+                    'neighborhood_id' => $neighborhood->id,
+                    'current_status' => DeviceStatus::IDLE,
+                    'health_status' => DeviceHealthStatus::HEALTHY,
+                    'installed_at' => now(),
+                    'is_publicly_visible' => true,
+                ]);
+
+                InventoryTransaction::create([
+                    'transaction_type' => 'rtrw_deployment',
+                    'device_id' => $device->id,
+                    'from_entity' => 'Gudang ' . ($device->city->name ?? 'Kota'),
+                    'to_entity' => "RT {$neighborhood->rt_number} / RW {$neighborhood->rw_number} ({$neighborhood->village->name})",
+                    'performed_by' => $user->id,
+                    'notes' => "Distribusi acak unit {$device->device_code} ke lingkungan warga.",
+                ]);
+
+                AuditLog::record(
+                    action: 'DEVICE_DISTRIBUTED_TO_RTRW',
+                    description: "{$user->name} mendistribusikan unit {$device->device_code} ke RT {$neighborhood->rt_number} / RW {$neighborhood->rw_number}.",
+                    entityType: 'Device',
+                    entityId: $device->id
+                );
+            }
+
+            if (! empty($validated['device_request_id'])) {
+                $devReq = DeviceRequest::find($validated['device_request_id']);
+                if ($devReq) {
+                    $devReq->update([
+                        'status' => 'completed',
+                        'reviewed_by' => $user->id,
+                        'review_notes' => "Disetujui & dikirim acak ke RT {$neighborhood->rt_number}/RW {$neighborhood->rw_number}: {$deviceNames}",
+                    ]);
+                }
+            }
+        });
+
+        return redirect()->route('admin.inventory.index')
+            ->with('success', "Berhasil mengirim {$pickedDevices->count()} unit ({$deviceNames}) ke RT {$neighborhood->rt_number} / RW {$neighborhood->rw_number}.");
     }
 }

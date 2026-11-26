@@ -25,7 +25,7 @@
         }
     </style>
 </head>
-<body class="min-h-full flex flex-col text-slate-800 antialiased selection:bg-emerald-500 selection:text-white">
+<body class="min-h-full flex flex-col text-slate-800 antialiased selection:bg-emerald-500 selection:text-white" x-data="{ mobileMenu: false }">
 
     <!-- TOP HEADER / NAVBAR -->
     <header class="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200/80">
@@ -43,31 +43,66 @@
                 </div>
             </a>
 
-            <!-- Nav Links -->
-            <nav class="hidden md:flex items-center gap-6 text-xs font-semibold text-slate-600">
+            <!-- Desktop Nav Links -->
+            <nav class="hidden lg:flex items-center gap-5 text-xs font-semibold text-slate-600">
                 <a href="{{ route('public.home') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.home') ? 'text-emerald-700 font-bold' : '' }}">Beranda</a>
-                <a href="{{ route('public.gis') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.gis') ? 'text-emerald-700 font-bold' : '' }}">Persebaran Mesin GIS</a>
-                <a href="{{ route('public.stats') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.stats') ? 'text-emerald-700 font-bold' : '' }}">Statistik Dampak</a>
-                <a href="#cara-kerja" class="hover:text-emerald-700 transition">Cara Kerja</a>
+                <a href="{{ route('public.about') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.about') ? 'text-emerald-700 font-bold' : '' }}">Tentang</a>
+                <a href="{{ route('public.how-it-works') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.how-it-works') ? 'text-emerald-700 font-bold' : '' }}">Cara Kerja</a>
+                <a href="{{ route('public.technology') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.technology') ? 'text-emerald-700 font-bold' : '' }}">Teknologi</a>
+                <a href="{{ route('public.gis') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.gis') ? 'text-emerald-700 font-bold' : '' }}">Peta GIS</a>
+                <a href="{{ route('public.stats') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.stats') ? 'text-emerald-700 font-bold' : '' }}">Statistik</a>
+                <a href="{{ route('public.news') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.news') ? 'text-emerald-700 font-bold' : '' }}">Berita</a>
+                <a href="{{ route('public.faq') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.faq') ? 'text-emerald-700 font-bold' : '' }}">FAQ</a>
+                <a href="{{ route('public.contact') }}" class="hover:text-emerald-700 transition {{ request()->routeIs('public.contact') ? 'text-emerald-700 font-bold' : '' }}">Kontak</a>
+                <a href="{{ route('public.chatbot.page') }}" class="hover:text-emerald-700 transition flex items-center gap-1 {{ request()->routeIs('public.chatbot.page') ? 'text-emerald-700 font-bold' : '' }}">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Tanya AI</span>
+                </a>
             </nav>
 
-            <!-- Action Buttons -->
-            <div class="flex items-center gap-3">
+            <!-- Action Buttons & Mobile Hamburger -->
+            <div class="flex items-center gap-2.5">
                 @auth
                     <a href="{{ route('admin.monitoring.index') }}"
-                        class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition">
-                        Buka Dashboard Admin
+                        class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition">
+                        Portal Admin
                     </a>
                 @else
                     <a href="{{ route('login') }}"
-                        class="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition border border-slate-200">
-                        Masuk Admin
+                        class="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-semibold transition border border-slate-200">
+                        Masuk
                     </a>
                     <a href="{{ route('register.rtrw') }}"
-                        class="hidden sm:inline-flex px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition">
+                        class="hidden sm:inline-flex px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold shadow-xs transition">
                         Daftar RT/RW
                     </a>
                 @endauth
+
+                <!-- Mobile Menu Button -->
+                <button @click="mobileMenu = !mobileMenu" class="lg:hidden p-2 rounded-xl text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path x-show="!mobileMenu" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        <path x-show="mobileMenu" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile Drawer -->
+        <div x-show="mobileMenu" x-collapse class="lg:hidden bg-white border-b border-slate-200 px-4 pt-2 pb-4 space-y-1 text-xs font-semibold">
+            <a href="{{ route('public.home') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Beranda</a>
+            <a href="{{ route('public.about') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Tentang</a>
+            <a href="{{ route('public.how-it-works') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Cara Kerja</a>
+            <a href="{{ route('public.technology') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Teknologi</a>
+            <a href="{{ route('public.gis') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Peta Persebaran GIS</a>
+            <a href="{{ route('public.stats') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Statistik Dampak</a>
+            <a href="{{ route('public.news') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Berita</a>
+            <a href="{{ route('public.faq') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">FAQ</a>
+            <a href="{{ route('public.contact') }}" class="block px-3 py-2 rounded-lg hover:bg-slate-50">Kontak & Sosialisasi</a>
+            <a href="{{ route('public.chatbot.page') }}" class="block px-3 py-2 rounded-lg text-emerald-700 bg-emerald-50">Tanya Asisten AI</a>
+            <div class="pt-2 border-t border-slate-100 flex gap-2">
+                <a href="{{ route('login') }}" class="w-1/2 text-center py-2 rounded-lg bg-slate-100 text-slate-800">Masuk Portal</a>
+                <a href="{{ route('register.rtrw') }}" class="w-1/2 text-center py-2 rounded-lg bg-emerald-600 text-white">Daftar RT/RW</a>
             </div>
         </div>
     </header>
@@ -96,22 +131,28 @@
             </div>
 
             <div>
-                <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider mb-3">Tautan Publik</h4>
+                <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider mb-3">Menu Informasi</h4>
                 <ul class="space-y-2">
-                    <li><a href="{{ route('public.home') }}" class="hover:text-emerald-700 transition">Beranda</a></li>
+                    <li><a href="{{ route('public.about') }}" class="hover:text-emerald-700 transition">Tentang Program</a></li>
+                    <li><a href="{{ route('public.how-it-works') }}" class="hover:text-emerald-700 transition">Cara Kerja Mesin</a></li>
+                    <li><a href="{{ route('public.technology') }}" class="hover:text-emerald-700 transition">Teknologi & Spesifikasi</a></li>
                     <li><a href="{{ route('public.gis') }}" class="hover:text-emerald-700 transition">Peta Persebaran GIS</a></li>
                     <li><a href="{{ route('public.stats') }}" class="hover:text-emerald-700 transition">Statistik Reduksi Massa</a></li>
-                    <li><a href="{{ route('register.rtrw') }}" class="hover:text-emerald-700 transition">Pendaftaran Pengurus RT/RW</a></li>
+                    <li><a href="{{ route('public.news') }}" class="hover:text-emerald-700 transition">Berita & Informasi</a></li>
+                    <li><a href="{{ route('public.faq') }}" class="hover:text-emerald-700 transition">FAQ</a></li>
+                    <li><a href="{{ route('public.contact') }}" class="hover:text-emerald-700 transition">Hubungi Kami</a></li>
                 </ul>
             </div>
 
             <div>
-                <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider mb-3">Akses Administrator</h4>
+                <h4 class="font-bold text-slate-900 text-xs uppercase tracking-wider mb-3">Portal Pengurus & RT/RW</h4>
                 <ul class="space-y-2">
+                    <li><a href="{{ route('register.rtrw') }}" class="hover:text-emerald-700 font-semibold text-emerald-800 transition">Pendaftaran Pengurus RT/RW</a></li>
                     <li><a href="{{ route('login') }}" class="hover:text-emerald-700 transition">Login Master Admin</a></li>
                     <li><a href="{{ route('login') }}" class="hover:text-emerald-700 transition">Login Admin Kota/Kabupaten</a></li>
                     <li><a href="{{ route('login') }}" class="hover:text-emerald-700 transition">Login Admin Lingkungan RT/RW</a></li>
                     <li><a href="{{ route('login') }}" class="hover:text-emerald-700 transition">Login Petugas Lapangan</a></li>
+                    <li><a href="{{ route('public.chatbot.page') }}" class="hover:text-emerald-700 transition font-semibold text-emerald-700">Asisten AI Publik</a></li>
                 </ul>
             </div>
         </div>
@@ -121,10 +162,10 @@
         </div>
     </footer>
 
-    <!-- 5. FLOATING AI CHATBOT WIDGET (RAG Powered) -->
+    <!-- FLOATING AI CHATBOT WIDGET -->
     <div id="chatbot-container" class="fixed bottom-5 right-5 z-50">
         <!-- Chat Panel (Hidden by default) -->
-        <div id="chat-panel" class="hidden mb-3 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[460px] animate-in fade-in slide-in-from-bottom-2 duration-200">
+        <div id="chat-panel" class="hidden mb-3 w-80 sm:w-96 bg-white rounded-2xl border border-slate-200 shadow-xl overflow-hidden flex flex-col h-[480px] animate-in fade-in slide-in-from-bottom-2 duration-200">
             <!-- Chat Header -->
             <div class="bg-emerald-600 p-3.5 text-white flex items-center justify-between">
                 <div class="flex items-center gap-2">
@@ -136,11 +177,18 @@
                         <div class="text-[10px] text-emerald-100">Informasi Sampah & Komposter RAG</div>
                     </div>
                 </div>
-                <button onclick="toggleChat()" class="text-white/80 hover:text-white p-1 rounded-lg">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
+                <div class="flex items-center gap-1">
+                    <a href="{{ route('public.chatbot.page') }}" title="Buka Halaman Penuh" class="text-white/80 hover:text-white p-1 rounded-lg">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
+                    </a>
+                    <button onclick="toggleChat()" class="text-white/80 hover:text-white p-1 rounded-lg">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
             </div>
 
             <!-- Messages Log -->
@@ -149,53 +197,46 @@
                     <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center justify-center shrink-0">
                         AI
                     </div>
-                    <div class="p-2.5 rounded-xl bg-slate-100 text-slate-800 max-w-[85%] leading-relaxed">
-                        Halo! Saya asisten informasi <strong>Smart Green Composter</strong>. Anda dapat bertanya seputar jenis sampah yang dapat diolah, cara kerja mesin, atau prosedur keselamatan.
+                    <div class="bg-slate-100 rounded-2xl p-3 text-slate-700 leading-relaxed max-w-[85%]">
+                        Halo! Saya asisten informasi publik ZeroWaste Green. Silakan tanyakan hal seputar panduan pemilahan sampah organik atau cara kerja Smart Green Composter!
                     </div>
                 </div>
             </div>
 
-            <!-- Typing Indicator -->
-            <div id="chat-typing" class="hidden px-4 py-1 text-[11px] text-slate-400 italic">
-                AI sedang mencari jawaban di Knowledge Base...
-            </div>
-
             <!-- Quick Suggestions -->
-            <div class="px-3 py-1.5 bg-slate-50 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto text-[10px]">
-                <button onclick="askPreset('Sampah apa saja yang boleh diolah?')" class="px-2 py-1 rounded bg-white border border-slate-200 text-slate-600 hover:border-emerald-500 whitespace-nowrap">
+            <div class="px-3 py-1.5 bg-slate-50 border-t border-slate-100 flex gap-1.5 overflow-x-auto text-[10px]">
+                <button onclick="quickAsk('Sampah apa saja yang boleh dimasukkan?')" class="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-emerald-500 shrink-0">
                     Sampah yang boleh?
                 </button>
-                <button onclick="askPreset('Bagaimana cara kerja mesin?')" class="px-2 py-1 rounded bg-white border border-slate-200 text-slate-600 hover:border-emerald-500 whitespace-nowrap">
-                    Cara kerja mesin?
-                </button>
-                <button onclick="askPreset('Berapa suhu maksimal aman?')" class="px-2 py-1 rounded bg-white border border-slate-200 text-slate-600 hover:border-emerald-500 whitespace-nowrap">
-                    Suhu aman?
+                <button onclick="quickAsk('Berapa lama proses komposting?')" class="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600 hover:border-emerald-500 shrink-0">
+                    Durasi mesin?
                 </button>
             </div>
 
             <!-- Chat Input -->
-            <form onsubmit="handleSendChat(event)" class="p-2.5 bg-white border-t border-slate-100 flex items-center gap-2">
-                <input id="chat-input" type="text" placeholder="Tanyakan seputar komposter..." required
-                    class="flex-1 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600">
-                <button type="submit" class="p-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shrink-0 transition">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
+            <form id="chat-form" onsubmit="handleChatSubmit(event)" class="p-2.5 bg-white border-t border-slate-200 flex gap-2">
+                <input id="chat-input" type="text" placeholder="Ketik pertanyaan Anda..." required
+                    class="flex-1 rounded-xl border border-slate-300 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-emerald-600">
+                <button type="submit" id="chat-send-btn" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition">
+                    Kirim
                 </button>
             </form>
         </div>
 
-        <!-- Floating Toggle Trigger Button -->
-        <button onclick="toggleChat()"
-            class="ml-auto w-12 h-12 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg flex items-center justify-center transition active:scale-95 group">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <!-- Floating Trigger Button -->
+        <button id="chatbot-trigger" onclick="toggleChat()" class="px-4 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-lg flex items-center gap-2 hover:scale-105 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
             </svg>
+            <span>Tanya Asisten AI</span>
         </button>
     </div>
 
-    <!-- AI Chatbot Client Script -->
+    <!-- Chatbot Script -->
     <script>
+        let chatToken = localStorage.getItem('sgc_chat_token') || ('tok_' + Math.random().toString(36).substring(2, 15));
+        localStorage.setItem('sgc_chat_token', chatToken);
+
         function toggleChat() {
             const panel = document.getElementById('chat-panel');
             panel.classList.toggle('hidden');
@@ -204,73 +245,86 @@
             }
         }
 
-        function askPreset(text) {
+        function quickAsk(text) {
             document.getElementById('chat-input').value = text;
-            handleSendChat(new Event('submit'));
+            document.getElementById('chat-form').dispatchEvent(new Event('submit'));
         }
 
-        async function handleSendChat(e) {
+        async function handleChatSubmit(e) {
             e.preventDefault();
             const input = document.getElementById('chat-input');
-            const message = input.value.trim();
-            if (!message) return;
+            const btn = document.getElementById('chat-send-btn');
+            const messages = document.getElementById('chat-messages');
+            const text = input.value.trim();
 
-            const messagesContainer = document.getElementById('chat-messages');
-            const typingIndicator = document.getElementById('chat-typing');
+            if (!text) return;
 
-            // Render User Message
-            messagesContainer.innerHTML += `
+            // User Message bubble
+            messages.innerHTML += `
                 <div class="flex items-start justify-end gap-2">
-                    <div class="p-2.5 rounded-xl bg-emerald-600 text-white max-w-[85%] leading-relaxed text-xs">
-                        ${escapeHtml(message)}
+                    <div class="bg-emerald-600 text-white rounded-2xl p-3 leading-relaxed max-w-[85%]">
+                        ${escapeHtml(text)}
                     </div>
                 </div>
             `;
             input.value = '';
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            messages.scrollTop = messages.scrollHeight;
+            btn.disabled = true;
 
-            typingIndicator.classList.remove('hidden');
+            // Loading bubble
+            const loadingId = 'loading-' + Date.now();
+            messages.innerHTML += `
+                <div id="${loadingId}" class="flex items-start gap-2">
+                    <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center justify-center shrink-0">AI</div>
+                    <div class="bg-slate-100 rounded-2xl p-3 text-slate-500 italic max-w-[85%]">
+                        Mengetik...
+                    </div>
+                </div>
+            `;
+            messages.scrollTop = messages.scrollHeight;
 
             try {
-                const response = await fetch("{{ route('public.chatbot') }}", {
+                const res = await fetch("{{ route('public.chatbot') }}", {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
                     },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({
+                        message: text,
+                        session_token: chatToken,
+                    })
                 });
+                const data = await res.json();
+                document.getElementById(loadingId)?.remove();
 
-                const data = await response.json();
-                typingIndicator.classList.add('hidden');
+                let sourceHtml = '';
+                if (data.source) {
+                    sourceHtml = `<div class="mt-2 pt-1 border-t border-slate-200 text-[10px] text-emerald-700 font-semibold">Sumber: ${escapeHtml(data.source)}</div>`;
+                }
 
-                const replyHtml = escapeHtml(data.reply).replace(/\n/g, '<br>');
-                const sourceBadge = data.source ? `<div class="mt-1 pt-1 border-t border-slate-200 text-[9px] text-slate-500 font-medium">Sumber: ${escapeHtml(data.source)}</div>` : '';
-
-                messagesContainer.innerHTML += `
+                messages.innerHTML += `
                     <div class="flex items-start gap-2">
-                        <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center justify-center shrink-0">
-                            AI
-                        </div>
-                        <div class="p-2.5 rounded-xl bg-slate-100 text-slate-800 max-w-[85%] leading-relaxed text-xs">
-                            ${replyHtml}
-                            ${sourceBadge}
+                        <div class="w-6 h-6 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center justify-center shrink-0">AI</div>
+                        <div class="bg-slate-100 rounded-2xl p-3 text-slate-800 leading-relaxed max-w-[85%]">
+                            <p class="whitespace-pre-line">${escapeHtml(data.reply || 'Tidak ada tanggapan.')}</p>
+                            ${sourceHtml}
                         </div>
                     </div>
                 `;
-                messagesContainer.scrollTop = messagesContainer.scrollHeight;
             } catch (err) {
-                typingIndicator.classList.add('hidden');
-                messagesContainer.innerHTML += `
+                document.getElementById(loadingId)?.remove();
+                messages.innerHTML += `
                     <div class="flex items-start gap-2">
-                        <div class="w-6 h-6 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold flex items-center justify-center shrink-0">
-                            !
-                        </div>
-                        <div class="p-2 rounded-xl bg-rose-50 text-rose-700 text-xs">
-                            Gagal menghubungi asisten AI. Silakan coba kembali nanti.
+                        <div class="w-6 h-6 rounded-full bg-rose-100 text-rose-800 text-[10px] font-bold flex items-center justify-center shrink-0">!</div>
+                        <div class="bg-rose-50 text-rose-800 rounded-2xl p-3 leading-relaxed max-w-[85%]">
+                            Gagal menghubungi asisten AI. Periksa koneksi internet Anda.
                         </div>
                     </div>
                 `;
+            } finally {
+                btn.disabled = false;
+                messages.scrollTop = messages.scrollHeight;
             }
         }
 
@@ -280,5 +334,6 @@
             return div.innerHTML;
         }
     </script>
+    @stack('scripts')
 </body>
 </html>

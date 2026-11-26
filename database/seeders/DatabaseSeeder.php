@@ -34,6 +34,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // [DATA DUMMY - PROVINSI]
+        // Ganti dengan data Provinsi resmi (kode BPS 2 digit string, nama string, koordinat pusat float lat/lng).
         // 1. SEED PROVINCES
         $jabar = Province::create([
             'code' => '32',
@@ -49,6 +51,8 @@ class DatabaseSeeder extends Seeder
             'longitude' => 106.845599,
         ]);
 
+        // [DATA DUMMY - KOTA/KABUPATEN]
+        // Ganti dengan data Kota/Kabupaten resmi (province_id int, code BPS 4 digit string, name string, type 'Kota'|'Kabupaten', float lat/lng).
         // 2. SEED CITIES
         $bogor = City::create([
             'province_id' => $jabar->id,
@@ -77,6 +81,9 @@ class DatabaseSeeder extends Seeder
             'longitude' => 106.810600,
         ]);
 
+        // [DATA DUMMY - KECAMATAN & KELURAHAN & RT/RW]
+        // Ganti dengan data Kecamatan (city_id int, code string, name string), Kelurahan (district_id int, code string, name string),
+        // dan RT/RW (village_id int, rt_number string 2 digit, rw_number string 2 digit, name string, address string, float lat/lng).
         // 3. SEED DISTRICTS
         $bogorTengah = District::create([
             'city_id' => $bogor->id,
@@ -140,6 +147,8 @@ class DatabaseSeeder extends Seeder
             'longitude' => 107.614200,
         ]);
 
+        // [DATA DUMMY - AKUN ADMINISTRATOR]
+        // Ganti dengan data akun administrator asli (name string, email string unik, password hashed string, phone_number string, role UserRole enum, city_id/neighborhood_id int|null, status 'active').
         // 6. SEED USERS FOR ALL 4 ROLES
         $masterAdmin = User::create([
             'name' => 'Budi Santoso (Master Admin)',
@@ -153,7 +162,7 @@ class DatabaseSeeder extends Seeder
         $adminBogor = User::create([
             'name' => 'Rahmat Hidayat (Admin Kota Bogor)',
             'email' => 'admin.bogor@zerowaste.id',
-            'password' => Hash::make('password'),
+            'password' => Hash::make('a'),
             'phone_number' => '081299990002',
             'role' => UserRole::ADMIN_KOTA,
             'city_id' => $bogor->id,
@@ -192,6 +201,9 @@ class DatabaseSeeder extends Seeder
             'status' => 'active',
         ]);
 
+        // [DATA DUMMY - PERANGKAT KOMPOSTER & KONFIGURASI]
+        // Ganti dengan data perangkat fisik asli: device_code (string unik sebagai Nama Alat), serial_number (string unik),
+        // api_key (string 32-64 char untuk autentikasi ESP32), city_id/neighborhood_id (int|null), serta batas suhu (float °C) dan timer default (int menit).
         // 7. SEED DEVICES & CONFIGURATIONS
         $device1 = Device::create([
             'serial_number' => 'SN-2026-BGR-001',
@@ -274,6 +286,8 @@ class DatabaseSeeder extends Seeder
             'updated_by' => $adminBandung->id,
         ]);
 
+        // [DATA DUMMY - RIWAYAT SIKLUS PENGOLAHAN]
+        // Ganti dengan data log operasi riil dari mesin (initial_weight & final_weight float Kg, durasi int menit, suhu float °C, timestamp datetime).
         // 8. SEED SAMPLE HISTORICAL OPERATION SESSIONS (Pencatatan Reduksi Massa)
         OperationSession::create([
             'session_uuid' => (string) Str::uuid(),
@@ -310,16 +324,14 @@ class DatabaseSeeder extends Seeder
         ]);
 
         // 9. SEED AUDIT LOG
-        AuditLog::create([
-            'user_id' => $masterAdmin->id,
-            'action' => 'INITIAL_SYSTEM_BOOTSTRAP',
-            'entity_type' => 'System',
-            'entity_id' => 1,
-            'ip_address' => '127.0.0.1',
-            'user_agent' => 'Seeder Script',
-            'description' => 'Inisialisasi sistem Smart Green Composter dan pembuatan akun awal per-role.',
-            'created_at' => now(),
-        ]);
+        \App\Services\Audit\AuditService::record(
+            action: 'INITIAL_SYSTEM_BOOTSTRAP',
+            description: 'Inisialisasi sistem Smart Green Composter dan pembuatan akun awal per-role.',
+            category: 'SYSTEM',
+            entityType: 'System',
+            entityId: 1,
+            userId: $masterAdmin->id
+        );
 
         // 10. SEED KNOWLEDGE BASE (Untuk RAG AI Chatbot)
         $doc1 = KnowledgeDocument::create([
@@ -392,6 +404,59 @@ class DatabaseSeeder extends Seeder
             'notes' => 'Alokasi stok awal 12 unit untuk wilayah Bogor.',
         ]);
 
+        // [DATA DUMMY - STOK ALAT PUSAT & KOTA (1 NAMA = 1 ALAT UNIK)]
+        // Ganti dengan daftar unit alat fisik yang tersedia di Gudang Pusat (city_id=null, neighborhood_id=null)
+        // dan Gudang Kota (city_id terisi, neighborhood_id=null).
+        foreach (['SGC-A01', 'SGC-A02', 'SGC-A03', 'SGC-A04', 'SGC-A05', 'SGC-A06'] as $idx => $code) {
+            $centralDev = Device::create([
+                'serial_number' => 'SN-2026-PST-' . str_pad((string) ($idx + 1), 3, '0', STR_PAD_LEFT),
+                'device_code' => $code,
+                'model_name' => $code,
+                'api_key' => Str::random(32),
+                'city_id' => null,
+                'neighborhood_id' => null,
+                'current_status' => DeviceStatus::IDLE,
+                'health_status' => DeviceHealthStatus::HEALTHY,
+                'is_publicly_visible' => false,
+                'notes' => 'Stok awal Gudang Pusat',
+            ]);
+            DeviceConfiguration::create([
+                'device_id' => $centralDev->id,
+                'min_temp_limit' => 20.00,
+                'max_temp_limit' => 65.00,
+                'critical_temp_cutoff' => 70.00,
+                'default_timer_minutes' => 240,
+                'auto_shutdown_enabled' => true,
+                'updated_by' => $masterAdmin->id,
+            ]);
+        }
+
+        foreach (['SGC-BGR-003', 'SGC-BGR-004'] as $idx => $code) {
+            $cityDev = Device::create([
+                'serial_number' => 'SN-2026-BGR-' . str_pad((string) ($idx + 3), 3, '0', STR_PAD_LEFT),
+                'device_code' => $code,
+                'model_name' => $code,
+                'api_key' => Str::random(32),
+                'city_id' => $bogor->id,
+                'neighborhood_id' => null,
+                'current_status' => DeviceStatus::IDLE,
+                'health_status' => DeviceHealthStatus::HEALTHY,
+                'is_publicly_visible' => false,
+                'notes' => 'Stok awal Gudang Kota Bogor',
+            ]);
+            DeviceConfiguration::create([
+                'device_id' => $cityDev->id,
+                'min_temp_limit' => 20.00,
+                'max_temp_limit' => 65.00,
+                'critical_temp_cutoff' => 70.00,
+                'default_timer_minutes' => 240,
+                'auto_shutdown_enabled' => true,
+                'updated_by' => $masterAdmin->id,
+            ]);
+        }
+
+        // [DATA DUMMY - PENGAJUAN PENDAFTARAN, PERMINTAAN ALAT, JADWAL, & TIKET KERUSAKAN]
+        // Hapus atau ganti blok di bawah ini dengan data operasional asli saat produksi.
         // 12. SEED SAMPLE PENDING REGISTRATION REQUEST (Untuk diuji Admin Kota Bogor)
         RegistrationRequest::create([
             'name' => 'Drs. H. Anwar Fauzi',

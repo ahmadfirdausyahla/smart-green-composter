@@ -5,14 +5,18 @@ namespace App\Http\Controllers\Public;
 use App\Enums\DeviceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
-use App\Models\KnowledgeChunk;
+use App\Models\KnowledgeDocument;
 use App\Models\OperationSession;
+use App\Services\AI\AIService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class PublicController extends Controller
 {
+    /**
+     * 1. Public Home Landing Page
+     */
     public function home(): View
     {
         $totalDevices = Device::where('is_publicly_visible', true)->count();
@@ -45,6 +49,33 @@ class PublicController extends Controller
         ));
     }
 
+    /**
+     * 2. About Smart Green Composter Page
+     */
+    public function about(): View
+    {
+        return view('public.about');
+    }
+
+    /**
+     * 3. How It Works Page
+     */
+    public function howItWorks(): View
+    {
+        return view('public.how_it_works');
+    }
+
+    /**
+     * 4. Technology & Features Page
+     */
+    public function technology(): View
+    {
+        return view('public.technology');
+    }
+
+    /**
+     * 5. Device Coverage Map Page (GIS)
+     */
     public function gis(): View
     {
         $devices = Device::with(['neighborhood.village.district.city.province'])
@@ -67,6 +98,9 @@ class PublicController extends Controller
         return view('public.gis', compact('devices'));
     }
 
+    /**
+     * 6. Environmental Impact & Stats Page
+     */
     public function stats(): View
     {
         $totalInitialWeight = (float) OperationSession::sum('initial_weight');
@@ -91,60 +125,49 @@ class PublicController extends Controller
     }
 
     /**
-     * RAG AI Public Chatbot endpoint.
-     * Uses KnowledgeBase chunks with local text similarity / RAG fallback.
+     * 7. News & Information Page
      */
-    public function chatbot(Request $request): JsonResponse
+    public function news(): View
     {
-        $query = trim((string) $request->input('message', ''));
+        return view('public.news');
+    }
 
-        if ($query === '') {
-            return response()->json(['reply' => 'Silakan ketik pertanyaan Anda seputar program Smart Green Composter.']);
-        }
+    /**
+     * 8. FAQ Page
+     */
+    public function faq(): View
+    {
+        $documents = KnowledgeDocument::where('is_published', true)->with('chunks')->get();
+        return view('public.faq', compact('documents'));
+    }
 
-        // Safety Guardrail: Never allow machine control commands or private queries
-        $lowered = strtolower($query);
-        $forbiddenKeywords = ['matikan mesin', 'nyalakan mesin', 'password', 'api_key', 'token', 'remote', 'bypass', 'hack'];
-        foreach ($forbiddenKeywords as $bad) {
-            if (str_contains($lowered, $bad)) {
-                return response()->json([
-                    'reply' => 'Maaf, saya adalah asisten informasi publik ZeroWaste Green. Saya tidak memiliki akses kendali mesin ataupun data sensitif sistem demi keamanan operasional.'
-                ]);
-            }
-        }
+    /**
+     * 9. Contact & Socialization Request Page
+     */
+    public function contact(): View
+    {
+        return view('public.contact');
+    }
 
-        // Simple RAG Matcher based on knowledge chunks
-        $keywords = array_filter(explode(' ', preg_replace('/[^\p{L}\p{N}\s]/u', '', $lowered)));
-        $chunks = KnowledgeChunk::with('document')->get();
+    /**
+     * 10. Standalone Fullscreen AI Chatbot Page
+     */
+    public function chatbotPage(): View
+    {
+        return view('public.chatbot');
+    }
 
-        $bestScore = 0;
-        $bestChunk = null;
+    /**
+     * RAG AI Public Chatbot Endpoint (POST).
+     * Powered by AIService with guardrails and RAG context injection.
+     */
+    public function chatbot(Request $request, AIService $aiService): JsonResponse
+    {
+        $message = (string) $request->input('message', '');
+        $token = $request->input('session_token');
 
-        foreach ($chunks as $chunk) {
-            $chunkText = strtolower($chunk->chunk_text);
-            $score = 0;
-            foreach ($keywords as $kw) {
-                if (strlen($kw) > 2 && str_contains($chunkText, $kw)) {
-                    $score += 2;
-                }
-            }
-            if ($score > $bestScore) {
-                $bestScore = $score;
-                $bestChunk = $chunk;
-            }
-        }
+        $result = $aiService->chat($message, $token, $request->ip());
 
-        if ($bestChunk && $bestScore >= 2) {
-            $reply = "Berdasarkan Knowledge Base Smart Green Composter:\n\n" . $bestChunk->chunk_text;
-            return response()->json([
-                'reply' => $reply,
-                'source' => $bestChunk->document->title ?? 'Basis Pengetahuan ZeroWaste Green'
-            ]);
-        }
-
-        return response()->json([
-            'reply' => 'Terima kasih telah bertanya. Informasi spesifik terkait hal tersebut belum tersedia di basis pengetahuan resmi kami. Anda dapat menghubungi pengurus RT/RW setempat atau tim ZeroWaste Green untuk informasi lebih lanjut.',
-            'source' => null
-        ]);
+        return response()->json($result);
     }
 }
